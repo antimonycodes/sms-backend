@@ -1,0 +1,223 @@
+# ====================================
+# DEPENDENCIES
+# ====================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ====================================
+# ENVIRONMENT VARIABLES
+# ====================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+.env.production
+*.env
+
+# ====================================
+# LOGS
+# ====================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ====================================
+# RUNTIME & CACHE
+# ====================================
+pids/
+*.pid
+*.seed
+*.pid.lock
+.npm
+.eslintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# ====================================
+# BUILD OUTPUTS
+# ====================================
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+.nyc_output
+
+# ====================================
+# DATABASE
+# ====================================
+*.db
+*.sqlite
+*.sqlite3
+database.json
+/database/
+/db/
+*.sql.backup
+dump.sql
+
+# ====================================
+# UPLOADS & TEMPORARY FILES
+# ====================================
+uploads/
+temp/
+tmp/
+*.tmp
+*.temp
+.cache/
+
+# ====================================
+# TESTING
+# ====================================
+coverage/
+.nyc_output/
+test-results/
+junit.xml
+.coverage
+htmlcov/
+
+# ====================================
+# IDE & EDITOR FILES
+# ====================================
+# VS Code
+.vscode/
+*.code-workspace
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# ====================================
+# OPERATING SYSTEM FILES
+# ====================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ====================================
+# TYPESCRIPT
+# ====================================
+*.tsbuildinfo
+.tsbuildinfo
+
+# ====================================
+# DOCUMENTATION
+# ====================================
+docs/build/
+.docusaurus/
+
+# ====================================
+# DOCKER
+# ====================================
+docker-compose.override.yml
+.dockerignore
+
+# ====================================
+# CERTIFICATES & KEYS
+# ====================================
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+ssl/
+certificates/
+
+# ====================================
+# CONFIGURATION FILES (if sensitive)
+# ====================================
+config/production.json
+config/staging.json
+config/local.json
+
+# ====================================
+# BACKUP FILES
+# ====================================
+*.backup
+*.bak
+*.orig
+
+# ====================================
+# PACKAGE MANAGERS
+# ====================================
+# Yarn
+.yarn/*
+!.yarn/cache
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# PNPM
+.pnpm-debug.log*
+.pnpm-store/
+
+# ====================================
+# SERVERLESS
+# ====================================
+.serverless/
+.serverless_nextjs/
+
+# ====================================
+# VERCEL
+# ====================================
+.vercel
+
+# ====================================
+# PROJECT SPECIFIC
+# ====================================
+# Add your project-specific ignores here
+# uploads/
+# static/user-content/
+# reports/
+# exports/
