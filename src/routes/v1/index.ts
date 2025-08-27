@@ -7,6 +7,7 @@ import adminRoutes from "./admin";
 import authRoutes from "./auth";
 
 import { createSchoolService } from "../../controller/v1/index";
+import { signoutService } from "@/controller/v1/auth/signin";
 // import pool from "@/lib/db";
 
 // routes

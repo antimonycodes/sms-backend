@@ -21,13 +21,20 @@ export interface PaginationInput {
   totalItems: number;
   itemsPerPage: number;
 }
-
 export interface SuccessResponse<T = any> {
   success: true;
   message: string;
-  data?: T;
+  data?: any;
   pagination?: PaginationInfo;
   timestamp: string;
+  school?: School | null;
+}
+
+export interface School {
+  id: number;
+  name: string;
+  address?: string;
+  // add other fields here
 }
 
 export interface ErrorResponse {

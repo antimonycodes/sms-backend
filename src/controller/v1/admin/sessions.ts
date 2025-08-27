@@ -81,7 +81,12 @@ export const createSchoolSession = async (
 
     await query("COMMIT");
 
-    return sendSuccess(res, "Session created successfully", result.rows[0]);
+    return sendSuccess(
+      req,
+      res,
+      "Session created successfully",
+      result.rows[0]
+    );
   } catch (error) {
     await query("ROLLBACK");
     console.error("Error creating session:", error);
@@ -101,7 +106,6 @@ export const getAllSessions = async (
   const limit = parseInt(req.query.limit as string) || 10;
 
   try {
-    // First, get the total count of sessions for this school
     const countQuery = `
       SELECT COUNT(*) as total 
       FROM school_sessions
@@ -110,15 +114,12 @@ export const getAllSessions = async (
     const countResult = await query(countQuery, [schoolId]);
     const totalItems = parseInt(countResult.rows[0].total);
 
-    // Calculate pagination details
     const pagination = calculatePagination(page, limit, totalItems);
 
-    // Get paginated sessions
     const paginatedQuery = `
       ${getAllSessionsQuery}
       LIMIT $2 OFFSET $3
     `;
-
     const result = await query(paginatedQuery, [
       schoolId,
       pagination.itemsPerPage,
@@ -130,17 +131,17 @@ export const getAllSessions = async (
 
     // Option 1: Using sendPaginatedSuccess (cleaner)
     return sendPaginatedSuccess(
+      req,
       res,
       "Sessions retrieved successfully",
-      {
-        sessions: result.rows,
-      },
+      result.rows,
       {
         currentPage: paginationInfo.currentPage,
         totalPages: paginationInfo.totalPages,
         totalItems: paginationInfo.totalItems,
         itemsPerPage: paginationInfo.itemsPerPage,
-      }
+      },
+      "sessions"
     );
 
     // Option 2: Using sendSuccess with pagination parameter
@@ -185,9 +186,12 @@ export const getActiveSession = async (
     }
 
     return sendSuccess(
+      req,
       res,
       "Active session retrieved successfully",
-      result.rows[0]
+      result.rows[0],
+      null,
+      "activeSession"
     );
   } catch (error) {
     console.error("Error fetching active session:", error);
@@ -213,34 +217,45 @@ export const updateSession = async (
       .json({ success: false, message: "No school assigned to user." });
   }
 
-  if (!sessionName || !startDate || !endDate) {
+  // Build dynamic update object
+  const updates: { [key: string]: any } = {};
+  if (sessionName) updates.session_name = sessionName;
+  if (startDate) updates.start_date = new Date(startDate);
+  if (endDate) updates.end_date = new Date(endDate);
+
+  // Validate dates if they exist
+  if (updates.start_date && isNaN(updates.start_date.getTime())) {
     return res
       .status(400)
-      .json({ success: false, message: "All fields are required." });
+      .json({ success: false, message: "Invalid startDate format." });
   }
-
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+  if (updates.end_date && isNaN(updates.end_date.getTime())) {
     return res
       .status(400)
-      .json({ success: false, message: "Invalid date format." });
+      .json({ success: false, message: "Invalid endDate format." });
   }
-
-  if (start >= end) {
+  if (
+    updates.start_date &&
+    updates.end_date &&
+    updates.start_date >= updates.end_date
+  ) {
     return res
       .status(400)
       .json({ success: false, message: "Start date must be before end date." });
   }
 
+  if (Object.keys(updates).length === 0) {
+    return res
+      .status(400)
+      .json({ success: false, message: "No fields provided to update." });
+  }
+
   try {
-    // Check if session exists and belongs to this school
+    // Check if session exists
     const sessionCheck = await query(
       "SELECT id FROM school_sessions WHERE id = $1 AND school_id = $2 LIMIT 1",
       [id, schoolId]
     );
-
     if (sessionCheck.rows.length === 0) {
       return res.status(404).json({
         success: false,
@@ -248,29 +263,42 @@ export const updateSession = async (
       });
     }
 
-    // Check if new name conflicts with existing sessions (excluding current session)
-    const nameCheck = await query(
-      "SELECT id FROM school_sessions WHERE school_id = $1 AND session_name = $2 AND id != $3 LIMIT 1",
-      [schoolId, sessionName, id]
-    );
-
-    if (nameCheck.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Session ${sessionName} already exists. Please choose a different name.`,
-      });
+    // If sessionName is being updated, check for conflicts
+    if (updates.session_name) {
+      const nameCheck = await query(
+        "SELECT id FROM school_sessions WHERE school_id = $1 AND session_name = $2 AND id != $3 LIMIT 1",
+        [schoolId, updates.session_name, id]
+      );
+      if (nameCheck.rows.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Session ${updates.session_name} already exists. Please choose a different name.`,
+        });
+      }
     }
 
-    // Update the session
+    // Build dynamic query
+    const setClauses = Object.keys(updates)
+      .map((key, index) => `${key} = $${index + 1}`)
+      .join(", ");
+    const values = [...Object.values(updates), id, schoolId];
+
     const result = await query(
-      `UPDATE school_sessions 
-       SET session_name = $1, start_date = $2, end_date = $3, updated_at = NOW()
-       WHERE id = $4 AND school_id = $5 
+      `UPDATE school_sessions
+       SET ${setClauses}, updated_at = NOW()
+       WHERE id = $${values.length - 1} AND school_id = $${values.length}
        RETURNING *`,
-      [sessionName, startDate, endDate, id, schoolId]
+      values
     );
 
-    return sendSuccess(res, "Session updated successfully", result.rows[0]);
+    return sendSuccess(
+      req,
+      res,
+      "Session updated successfully",
+      result.rows[0],
+      null,
+      "session"
+    );
   } catch (error) {
     console.error("Error updating session:", error);
     return sendServerError(res, "Failed to update session. Please try again.");
@@ -318,7 +346,7 @@ export const deleteSession = async (
     // Delete the session
     const result = await query(deleteSessionQuery, [id, schoolId]);
 
-    return sendSuccess(res, "Session deleted successfully", {
+    return sendSuccess(req, res, "Session deleted successfully", {
       deletedSession: result.rows[0],
     });
   } catch (error) {
@@ -381,7 +409,14 @@ export const toggleSessionStatus = async (
     await query("COMMIT");
 
     const action = isActive ? "activated" : "deactivated";
-    return sendSuccess(res, `Session ${action} successfully`, result.rows[0]);
+    return sendSuccess(
+      req,
+      res,
+      `Session ${action} successfully`,
+      result.rows[0],
+      null,
+      "session"
+    );
   } catch (error) {
     await query("ROLLBACK");
     console.error("Error toggling session status:", error);

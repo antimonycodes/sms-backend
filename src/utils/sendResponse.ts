@@ -1,3 +1,6 @@
+import { query } from "@/lib/db";
+import { logger } from "@/lib/winston";
+import { AuthenticatedRequest } from "@/middlewares/auth";
 import {
   ErrorResponse,
   PaginationInfo,
@@ -8,48 +11,96 @@ import {
 import { Response, NextFunction, Request } from "express";
 import { ValidationError } from "express-validator";
 
-// ====================================
-// RESPONSE HANDLERS (utils/responses.ts)
-// ====================================
+interface School {
+  id: number;
+  name: string;
+  location: string;
+  // ...other columns
+}
 
-/**
- * Send success response
- */
-export const sendSuccess = <T = any>(
+// export async function withSchool<T>(
+//   data: T
+// ): Promise<T & { school: School | null }> {
+//   const result = await query("SELECT * FROM schools LIMIT 1");
+
+//   // Safely pick first row
+//   const school: School | null =
+//     result.rows.length > 0 ? (result.rows[0] as School) : null;
+
+//   return {
+//     ...data,
+//     school,
+//   };
+// }
+
+// ✅ helper: always attach school
+export async function withSchool<T>(
+  data: T,
+  schoolId?: string,
+  keyName: string = "data"
+): Promise<Record<string, any>> {
+  let school: School | null = null;
+
+  try {
+    if (schoolId) {
+      const result = await query("SELECT * FROM schools WHERE id = $1", [
+        schoolId,
+      ]);
+      if (result.rows.length > 0) school = result.rows[0] as School;
+    } else {
+      const result = await query("SELECT * FROM schools LIMIT 1");
+      if (result.rows.length > 0) school = result.rows[0] as School;
+    }
+  } catch (err) {
+    console.error("Error fetching school:", err);
+  }
+
+  return {
+    [keyName]: data, // dynamic key here
+    school,
+  };
+}
+
+// success response
+export const sendSuccess = async <T = any>(
+  req: AuthenticatedRequest,
   res: Response,
   message: string,
   data: T | null = null,
-  statusCode: number = 200,
-  pagination: PaginationInfo | null = null
-): Response<SuccessResponse<T>> => {
-  const response: SuccessResponse<T> = {
+  pagination: PaginationInfo | null = null,
+  keyName: string = "items" // fallback key
+): Promise<Response> => {
+  let schoolId =
+    req.user?.schoolId || req.query.school_id || req.params.school_id;
+  if (typeof schoolId === "number") {
+    schoolId = schoolId.toString();
+  }
+
+  const dataWithSchool = await withSchool(
+    data ?? {},
+    schoolId as string | undefined,
+    keyName
+  );
+
+  const response: SuccessResponse<typeof dataWithSchool> = {
     success: true,
     message,
     timestamp: new Date().toISOString(),
+    data: dataWithSchool,
+    pagination: pagination ?? undefined,
   };
 
-  // Only add data if it exists
-  if (data !== null) {
-    response.data = data;
-  }
-
-  // Add pagination info if provided
-  if (pagination) {
-    response.pagination = pagination;
-  }
-
-  return res.status(statusCode).json(response);
+  return res.status(200).json(response);
 };
 
-/**
- * Send paginated success response (convenience function)
- */
-export const sendPaginatedSuccess = <T = any>(
+export const sendPaginatedSuccess = async <T = any>(
+  req: AuthenticatedRequest,
   res: Response,
   message: string,
   data: T,
-  paginationInfo: PaginationInput
-): Response<SuccessResponse<T>> => {
+  paginationInfo: PaginationInput,
+  keyName: string = "items"
+): Promise<Response> => {
   const pagination: PaginationInfo = {
     currentPage: paginationInfo.currentPage,
     totalPages: paginationInfo.totalPages,
@@ -59,7 +110,7 @@ export const sendPaginatedSuccess = <T = any>(
     hasPrev: paginationInfo.currentPage > 1,
   };
 
-  return sendSuccess(res, message, data, 200, pagination);
+  return sendSuccess(req, res, message, data, pagination, keyName);
 };
 
 /**

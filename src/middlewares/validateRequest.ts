@@ -1,8 +1,13 @@
 import { body, validationResult } from "express-validator";
-import { sendError } from "../utils/responses";
 import { Request, Response, NextFunction } from "express";
 import { checkEmailExistsQuery } from "@/data/sqlQuery";
 import { query } from "@/lib/db";
+import {
+  getStudentByAdmissionNumberQuery,
+  // getStudentByAdmissionNumberQuery,
+  getStudentByEmailQuery,
+} from "@/data/admin.queries";
+import { sendError } from "@/utils/sendResponse";
 
 // Validation middleware
 export const schoolSignupValidation = [
@@ -41,3 +46,79 @@ export const schoolSignupValidation = [
     next();
   },
 ];
+
+export const createStudentValidator = async (data: any, schoolId: string) => {
+  const { admission_number, first_name, last_name, email } = data;
+
+  // required fields check
+  if (!admission_number || !first_name || !last_name || !email) {
+    return {
+      valid: false,
+      status: 400,
+      message: "Missing required fields",
+    };
+  }
+
+  // check email uniqueness
+  const emailExists = await query(getStudentByEmailQuery, [email, schoolId]);
+  if ((emailExists.rowCount ?? 0) > 0) {
+    return {
+      valid: false,
+      status: 409,
+      message: "Email already exists",
+    };
+  }
+
+  // check admission number uniqueness
+  const admissionNumberExists = await query(getStudentByAdmissionNumberQuery, [
+    admission_number,
+    schoolId,
+  ]);
+  if ((admissionNumberExists.rowCount ?? 0) > 0) {
+    return {
+      valid: false,
+      status: 409,
+      message: "Admission number already exists",
+    };
+  }
+
+  return { valid: true };
+};
+
+export const updateStudentValidator = async (data: any, schoolId: string) => {
+  const { admission_number, first_name, last_name, email } = data;
+
+  // required fields check
+  if (!admission_number || !first_name || !last_name || !email) {
+    return {
+      valid: false,
+      status: 400,
+      message: "Missing required fields",
+    };
+  }
+
+  // check email uniqueness
+  const emailExists = await query(getStudentByEmailQuery, [email, schoolId]);
+  if ((emailExists.rowCount ?? 0) > 0) {
+    return {
+      valid: false,
+      status: 409,
+      message: "Email already exists",
+    };
+  }
+
+  // check admission number uniqueness
+  const admissionNumberExists = await query(getStudentByAdmissionNumberQuery, [
+    admission_number,
+    schoolId,
+  ]);
+  if ((admissionNumberExists.rowCount ?? 0) > 0) {
+    return {
+      valid: false,
+      status: 409,
+      message: "Admission number already exists",
+    };
+  }
+
+  return { valid: true };
+};

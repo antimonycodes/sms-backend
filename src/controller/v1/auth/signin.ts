@@ -15,81 +15,107 @@ import {
   createUserQuery,
   signinQuery,
 } from "@/data/sqlQuery";
+import { ensureDefaultClassLevels } from "../admin/classes";
+import { ensureDefaultTermsService } from "../admin/terms";
+import { generateAccessToken, generateRefreshToken } from "@/lib/jwt";
+import { config } from "@/config";
 
 // Single signin function for all user types
 export const signinService = asyncHandler(
   async (req: Request, res: Response) => {
     const { email, password } = req.body;
-
-    if (!email || !password) {
+    if (!email || !password)
       return sendError(res, "Email and password are required");
-    }
 
-    // Find user by email (works for all roles)
     const result = await query(signinQuery, [email]);
-
-    if (result.rows.length === 0) {
+    if (result.rows.length === 0)
       return sendError(res, "Invalid credentials", 401);
-    }
 
     const user = result.rows[0];
-
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return sendError(res, "Invalid credentials", 401);
-    }
+    if (!isMatch) return sendError(res, "Invalid credentials", 401);
 
-    // Generate JWT with user info
-    const token = jwt.sign(
-      {
+    const payload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      school_id: user.school_id,
+    };
+
+    const accessToken = generateAccessToken(payload);
+    const refreshToken = generateRefreshToken(payload);
+
+    // Optional: store refresh token in DB
+    await query("UPDATE users SET refresh_token = $1 WHERE id = $2", [
+      refreshToken,
+      user.id,
+    ]);
+
+    // Send refresh token as secure cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    const data = {
+      user: {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        phone: user.phone,
+        image: user.avatar_url,
+        role: user.role,
+        is_active: user.is_active,
+        created_at: user.created_at,
+      },
+      accessToken,
+    };
+
+    return sendSuccess(req, res, "Login successful", data, null, "user");
+  }
+);
+export const refreshTokenService = asyncHandler(
+  async (req: Request, res: Response) => {
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) return sendError(res, "No refresh token", 401);
+
+    try {
+      const decoded: any = jwt.verify(refreshToken, config.JWT_REFRESH_SECRET);
+
+      // Verify refresh token in DB
+      const result = await query(
+        "SELECT id, email, role, school_id FROM users WHERE id = $1 AND refresh_token = $2",
+        [decoded.id, refreshToken]
+      );
+
+      if (result.rows.length === 0)
+        return sendError(res, "Invalid refresh token", 403);
+
+      const user = result.rows[0];
+      const payload = {
         id: user.id,
         email: user.email,
         role: user.role,
         school_id: user.school_id,
-      },
-      process.env.JWT_ACCESS_SECRET as string,
-      { expiresIn: "24h" }
-    );
+      };
 
-    // Format created_at date
-    const formatDate = (dateString: string) => {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    };
+      //  new access token
+      const newAccessToken = generateAccessToken(payload);
 
-    // Structure response to match your format
-    const data = {
-      user: {
-        type: "User",
-        id: user.id,
-        attributes: {
-          first_name: user.first_name,
-          last_name: user.last_name,
-          email: user.email,
-          phone: user.phone,
-          image: user.avatar_url,
-          role: user.role,
-          is_active: user.is_active,
-          school: {
-            id: user.school_id,
-            name: user.school_name,
-            logo: user.logo_url || null,
-            // domain: null,
-            subscription_plan: user.subscription_plan,
-          },
-          // department: user.department || null,
-          created_at: user.created_at,
-        },
-      },
-      token,
-    };
-
-    return sendSuccess(res, "Login successful", data);
+      return sendSuccess(
+        req,
+        res,
+        "Token refreshed",
+        newAccessToken,
+        null,
+        "accessToken"
+      );
+    } catch (err) {
+      return sendError(res, "Invalid or expired refresh token", 403);
+    }
   }
 );
 
@@ -126,6 +152,10 @@ export const schoolSignupService = asyncHandler(
       ]);
 
       const school = schoolResult.rows[0];
+
+      //create class levels for school
+      await ensureDefaultClassLevels(school.id);
+      await ensureDefaultTermsService(school.id);
 
       // 2. Create admin user (using school name as first_name)
       const userResult = await query(createUserQuery, [
@@ -192,6 +222,7 @@ export const schoolSignupService = asyncHandler(
       };
 
       return sendSuccess(
+        req,
         res,
         "School and admin account created successfully",
         data
@@ -330,11 +361,38 @@ export const userSignupService = asyncHandler(
         token,
       };
 
-      return sendSuccess(res, `${role} account created successfully`, data);
+      return sendSuccess(
+        req,
+        res,
+        `${role} account created successfully`,
+        data
+      );
     } catch (error) {
       await query("ROLLBACK");
       console.error("User signup error:", error);
       return sendError(res, "Failed to create user account", 500);
     }
+  }
+);
+
+export const signoutService = asyncHandler(
+  async (req: Request, res: Response) => {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (refreshToken) {
+      // Invalidate refresh token in DB
+      await query(
+        "UPDATE users SET refresh_token = NULL WHERE refresh_token = $1",
+        [refreshToken]
+      );
+    }
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    return sendSuccess(req, res, "Logged out successfully");
   }
 );
