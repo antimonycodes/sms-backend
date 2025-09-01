@@ -313,5 +313,6 @@ RETURNING *;
 export const deleteStudentQuery = `
 DELETE FROM students
 WHERE id = $1 AND school_id = $2
+
 RETURNING *;
 `;

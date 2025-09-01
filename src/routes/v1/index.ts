@@ -5,6 +5,7 @@ const router = Router();
 
 import adminRoutes from "./admin";
 import authRoutes from "./auth";
+import commonRoutes from "./common";
 
 import { createSchoolService } from "../../controller/v1/index";
 import { signoutService } from "@/controller/v1/auth/signin";
@@ -28,5 +29,6 @@ router.use((req, res, next) => {
 
 router.use("/admin", adminRoutes);
 router.use("/auth", authRoutes);
+router.use("/", commonRoutes);
 
 export default router;

@@ -11,11 +11,13 @@ import {
   deleteTeacherSubjectsQuery,
   getTeacherSubjectsQuery,
 } from "@/data/admin.queries";
+import { createUserQuery } from "@/data/sqlQuery";
 import { query, withTransaction } from "@/lib/db";
 import { logger } from "@/lib/winston";
 import { AuthenticatedRequest } from "@/middlewares/auth";
 import { asyncHandler, sendSuccess, sendError } from "@/utils/sendResponse";
 import { Response } from "express";
+import bcrypt from "bcryptjs";
 
 interface CreateTeacherRequest {
   employee_id: string;
@@ -216,6 +218,22 @@ export const createTeacherService = asyncHandler(
 
         const teacherData = teacherResult.rows[0];
         const teacherId = teacherData.id;
+        const password = "123456";
+        const salt = await bcrypt.genSalt(12);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // 2. Create admin user (using school name as first_name)
+        const userResult = await query(createUserQuery, [
+          schoolId, // school_id
+          teacherData.first_name, // first_name (same as school name)
+          teacherData.last_name, // last_name (null for admin)
+          teacherData.email, // email (same as school email)
+          hashedPassword,
+          "teacher", // role
+          true, // is_active
+        ]);
+
+        logger.info(userResult);
 
         for (const subject of primary_subjects) {
           const subjectResult = await client.query(
@@ -275,7 +293,19 @@ export const createTeacherService = asyncHandler(
 export const getAllTeachersService = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     const schoolId = req.user?.schoolId || req.currentSchoolId;
-    const { page = 1, limit = 10, is_active, search } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      is_active,
+      search,
+      qualification,
+      hire_date_from,
+      hire_date_to,
+      salary_min,
+      salary_max,
+      sort_by = "created_at",
+      sort_order = "DESC",
+    } = req.query;
 
     if (!schoolId) {
       return sendError(res, "School ID is required", 400);
@@ -284,23 +314,23 @@ export const getAllTeachersService = asyncHandler(
     try {
       // Build dynamic query based on filters
       let baseQuery = `
-  SELECT 
-    t.*,
-    COALESCE(
-      JSON_AGG(
-        JSON_BUILD_OBJECT(
-          'id', s.id,
-          'name', s.name,
-          'code', s.subject_code,
-          'category', s.category
-        )
-      ) FILTER (WHERE s.id IS NOT NULL), '[]'
-    ) as primary_subjects
-  FROM teachers t
-  LEFT JOIN teacher_primary_subjects tps ON t.id = tps.teacher_id
-  LEFT JOIN school_subjects s ON tps.subject_id = s.id AND s.school_id = $1
-  WHERE t.school_id = $1
-`;
+        SELECT 
+          t.*,
+          COALESCE(
+            JSON_AGG(
+              JSON_BUILD_OBJECT(
+                'id', s.id,
+                'name', s.name,
+                'code', s.subject_code,
+                'category', s.category
+              )
+            ) FILTER (WHERE s.id IS NOT NULL), '[]'
+          ) as primary_subjects
+        FROM teachers t
+        LEFT JOIN teacher_primary_subjects tps ON t.id = tps.teacher_id
+        LEFT JOIN school_subjects s ON tps.subject_id = s.id AND s.school_id = $1
+        WHERE t.school_id = $1
+      `;
 
       const queryParams: any[] = [schoolId];
       let paramIndex = 2;
@@ -312,27 +342,83 @@ export const getAllTeachersService = asyncHandler(
         paramIndex++;
       }
 
+      if (qualification) {
+        baseQuery += ` AND t.qualification ILIKE $${paramIndex}`;
+        queryParams.push(`%${qualification}%`);
+        paramIndex++;
+      }
+
+      if (hire_date_from) {
+        baseQuery += ` AND t.hire_date >= $${paramIndex}`;
+        queryParams.push(hire_date_from);
+        paramIndex++;
+      }
+
+      if (hire_date_to) {
+        baseQuery += ` AND t.hire_date <= $${paramIndex}`;
+        queryParams.push(hire_date_to);
+        paramIndex++;
+      }
+
+      if (salary_min) {
+        baseQuery += ` AND CAST(t.salary AS DECIMAL) >= $${paramIndex}`;
+        queryParams.push(Number(salary_min));
+        paramIndex++;
+      }
+
+      if (salary_max) {
+        baseQuery += ` AND CAST(t.salary AS DECIMAL) <= $${paramIndex}`;
+        queryParams.push(Number(salary_max));
+        paramIndex++;
+      }
+
+      // Enhanced search - supports full name search
       if (search) {
         baseQuery += ` AND (
           t.first_name ILIKE $${paramIndex} OR 
           t.last_name ILIKE $${paramIndex} OR 
+          t.middle_name ILIKE $${paramIndex} OR
+          CONCAT(t.first_name, ' ', t.last_name) ILIKE $${paramIndex} OR
+          CONCAT(t.first_name, ' ', t.middle_name, ' ', t.last_name) ILIKE $${paramIndex} OR
           t.employee_id ILIKE $${paramIndex} OR 
-          t.email ILIKE $${paramIndex}
+          t.email ILIKE $${paramIndex} OR
+          t.phone ILIKE $${paramIndex}
         )`;
         queryParams.push(`%${search}%`);
         paramIndex++;
       }
 
-      baseQuery += ` GROUP BY t.id ORDER BY t.created_at DESC`;
+      baseQuery += ` GROUP BY t.id`;
+
+      // Add sorting
+      const allowedSortFields = [
+        "first_name",
+        "last_name",
+        "email",
+        "employee_id",
+        "hire_date",
+        "salary",
+        "created_at",
+        "qualification",
+      ];
+      const sortField = allowedSortFields.includes(sort_by as string)
+        ? sort_by
+        : "created_at";
+      const sortDirection =
+        sort_order?.toString().toUpperCase() === "ASC" ? "ASC" : "DESC";
+
+      baseQuery += ` ORDER BY t.${sortField} ${sortDirection}`;
 
       // Add pagination
-      const offset = (Number(page) - 1) * Number(limit);
+      const pageNum = Number(page);
+      const limitNum = Number(limit);
+      const offset = (pageNum - 1) * limitNum;
       baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-      queryParams.push(Number(limit), offset);
+      queryParams.push(limitNum, offset);
 
       const teachersResult = await query(baseQuery, queryParams);
 
-      // Get total count for pagination
+      // Get total count for pagination (same filters as main query)
       let countQuery = `
         SELECT COUNT(DISTINCT t.id) as total
         FROM teachers t
@@ -342,9 +428,40 @@ export const getAllTeachersService = asyncHandler(
       const countParams: any[] = [schoolId];
       let countParamIndex = 2;
 
+      // Apply same filters to count query
       if (is_active !== undefined) {
         countQuery += ` AND t.is_active = $${countParamIndex}`;
         countParams.push(is_active === "true");
+        countParamIndex++;
+      }
+
+      if (qualification) {
+        countQuery += ` AND t.qualification ILIKE $${countParamIndex}`;
+        countParams.push(`%${qualification}%`);
+        countParamIndex++;
+      }
+
+      if (hire_date_from) {
+        countQuery += ` AND t.hire_date >= $${countParamIndex}`;
+        countParams.push(hire_date_from);
+        countParamIndex++;
+      }
+
+      if (hire_date_to) {
+        countQuery += ` AND t.hire_date <= $${countParamIndex}`;
+        countParams.push(hire_date_to);
+        countParamIndex++;
+      }
+
+      if (salary_min) {
+        countQuery += ` AND CAST(t.salary AS DECIMAL) >= $${countParamIndex}`;
+        countParams.push(Number(salary_min));
+        countParamIndex++;
+      }
+
+      if (salary_max) {
+        countQuery += ` AND CAST(t.salary AS DECIMAL) <= $${countParamIndex}`;
+        countParams.push(Number(salary_max));
         countParamIndex++;
       }
 
@@ -352,23 +469,39 @@ export const getAllTeachersService = asyncHandler(
         countQuery += ` AND (
           t.first_name ILIKE $${countParamIndex} OR 
           t.last_name ILIKE $${countParamIndex} OR 
+          t.middle_name ILIKE $${countParamIndex} OR
+          CONCAT(t.first_name, ' ', t.last_name) ILIKE $${countParamIndex} OR
+          CONCAT(t.first_name, ' ', t.middle_name, ' ', t.last_name) ILIKE $${countParamIndex} OR
           t.employee_id ILIKE $${countParamIndex} OR 
-          t.email ILIKE $${countParamIndex}
+          t.email ILIKE $${countParamIndex} OR
+          t.phone ILIKE $${countParamIndex}
         )`;
         countParams.push(`%${search}%`);
       }
 
       const countResult = await query(countQuery, countParams);
       const totalTeachers = parseInt(countResult.rows[0].total);
-      const totalPages = Math.ceil(totalTeachers / Number(limit));
+      const totalPages = Math.ceil(totalTeachers / limitNum);
 
+      // Calculate 'from' and 'to' for frontend
+      const from = totalTeachers > 0 ? offset + 1 : 0;
+      const to = Math.min(offset + limitNum, totalTeachers);
+
+      // Frontend-compatible pagination structure
       const pagination = {
-        currentPage: Number(page),
-        itemsPerPage: Number(limit),
+        total: totalTeachers,
+        per_page: limitNum,
+        current_page: pageNum,
+        last_page: totalPages,
+        from: from,
+        to: to,
+        // Keep your original structure for backward compatibility
+        currentPage: pageNum,
+        itemsPerPage: limitNum,
         totalItems: totalTeachers,
         totalPages: totalPages,
-        hasNext: Number(page) < totalPages,
-        hasPrev: Number(page) > 1,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1,
       };
 
       return sendSuccess(
