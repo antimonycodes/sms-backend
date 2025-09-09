@@ -35,7 +35,6 @@ export enum Permission {
   VIEW_ATTENDANCE = "view_attendance",
 }
 
-// What's in our JWT token
 export interface JWTPayload {
   userId: number;
   email: string;
@@ -47,6 +46,8 @@ export interface AuthUser {
   id: number;
   role: UserRole;
   schoolId?: number;
+  currentSession?: any;
+  currentTerm?: any;
 }
 
 export interface AuthenticatedRequest extends Request {

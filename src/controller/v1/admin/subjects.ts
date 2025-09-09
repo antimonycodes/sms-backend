@@ -6,6 +6,7 @@ import {
 import { query, withTransaction } from "@/lib/db";
 import { logger } from "@/lib/winston";
 import { AuthenticatedRequest } from "@/middlewares/auth";
+import { getList } from "@/utils/querybuilder";
 import { asyncHandler, sendError, sendSuccess } from "@/utils/sendResponse";
 import { Response } from "express";
 import { Client } from "pg";
@@ -123,15 +124,39 @@ export const createSubjectService = asyncHandler(
 export const getAllSubjectsService = asyncHandler(
   async (req: AuthenticatedRequest, res: Response) => {
     const schoolId = req.user?.schoolId || req.currentSchoolId;
+    const {
+      page = 1,
+      limit = 10,
+      is_active,
+      search,
+      qualification,
+      hire_date_from,
+      hire_date_to,
+      salary_min,
+      salary_max,
+      sort_by = "created_at",
+      sort_order = "DESC",
+    } = req.query;
 
-    const result = await query(getAllSubjectsQuery, [schoolId]);
+    if (!schoolId) {
+      return res.status(403).json({
+        status: "error",
+        message: "Forbidden",
+      });
+    }
+
+    const result = await getList(getAllSubjectsQuery, [schoolId], req.query, {
+      searchFields: ["s.first_name", "s.last_name", "s.email"],
+      countField: "ss.id",
+    });
 
     return sendSuccess(
       req,
       res,
       "Subjects retrieved successfully",
-      result.rows,
-      null,
+      result.data,
+      result.pagination,
+
       "subjects"
     );
   }

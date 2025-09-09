@@ -42,3 +42,9 @@ export const deleteAnnouncementQuery = `
 DELETE FROM announcements
 WHERE announcements.id = $1
 `;
+
+export const createEnrollmentQuery = `
+INSERT INTO student_enrollments(school_id,student_id,class_arm_id,session_id,term_id,promotion_status,user_id)
+VALUES($1,$2,$3,$4,$5,$6,$7)
+RETURNING *
+`;

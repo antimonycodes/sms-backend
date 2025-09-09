@@ -5,10 +5,12 @@ import {
   getAllClassLevelsQuery,
   seedClassLevelsQuery,
 } from "@/data/admin.queries";
+import { getStudentsInAclassQuery } from "@/data/class.queries";
 import { query } from "@/lib/db";
 import { logger } from "@/lib/winston";
 import { AuthenticatedRequest } from "@/middlewares/auth";
-import { asyncHandler, sendSuccess } from "@/utils/sendResponse";
+import { getList } from "@/utils/querybuilder";
+import { asyncHandler, sendError, sendSuccess } from "@/utils/sendResponse";
 import { Request, Response } from "express";
 
 export const ensureDefaultClassLevels = async (schoolId: string) => {
@@ -74,7 +76,7 @@ export const createClassArmService = asyncHandler(
     }
 
     const nameCheck = await query(
-      "SELECT id FROM class_levels WHERE school_id = $1 AND id = $2 LIMIT 1",
+      `SELECT id FROM class_levels WHERE school_id = $1 AND id = $2 LIMIT 1`,
       [schoolId, classLevelId]
     );
 
@@ -208,6 +210,152 @@ export const getAllClassArmsService = asyncHandler(
       result.rows,
       null,
       "classArms"
+    );
+  }
+);
+
+export const getStudentsByClassIdService = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const schoolId = req.user?.schoolId;
+    const role = req.user?.role;
+    const currentSession = req.user?.currentSession;
+    const { classArmId } = req.params;
+
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      sort_by = "s.last_name",
+      sort_order = "ASC",
+      session_id, //
+    } = req.query;
+
+    if (!classArmId) {
+      return sendError(res, "Class arm is required", 400);
+    }
+
+    // default sessionId = currentSession if frontend didn’t provide
+    const sessionFilter = session_id || currentSession;
+
+    const baseQuery = `
+      SELECT s.*, se.is_promoted, se.promotion_status
+      FROM student_enrollments se
+      INNER JOIN students s ON se.student_id = s.id
+      JOIN class_arms ca ON se.class_arm_id = ca.id
+      JOIN class_levels cl ON ca.class_level_id = cl.id
+      WHERE ca.id = $1
+        AND se.session_id = $2
+    `;
+
+    const result = await getList(
+      baseQuery,
+      [classArmId, sessionFilter], // 👈 always 2 params only
+      req.query,
+      {
+        searchFields: ["s.first_name", "s.last_name", "s.email"],
+        sortFields: ["s.first_name", "s.last_name", "s.email"],
+        defaultSort: "s.last_name",
+        countField: "s.id",
+      }
+    );
+
+    return sendSuccess(
+      req,
+      res,
+      "Class Students retrieved successfully",
+      result.data,
+      result.pagination,
+      "students"
+    );
+  }
+);
+
+export const getClassArmStatsService = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { classArmId } = req.params;
+    const schoolId = req.user?.schoolId;
+    const currentSession = req.user?.currentSession;
+    const { session_id } = req.query;
+
+    if (!classArmId) {
+      return sendError(res, "Class arm is required", 400);
+    }
+
+    const sessionFilter = session_id || currentSession;
+
+    const statsQuery = `
+SELECT 
+  COUNT(*) AS total_students,
+  COUNT(*) FILTER (WHERE s.gender = 'Male') AS male_students,
+  COUNT(*) FILTER (WHERE s.gender = 'Female') AS female_students,
+  ROUND(AVG(EXTRACT(YEAR FROM age(s.date_of_birth)))) AS average_age,
+  ca.name AS class_arm_name,
+  ss.session_name,
+  st.name AS term_name
+FROM student_enrollments se
+JOIN students s ON se.student_id = s.id
+JOIN class_arms ca ON se.class_arm_id = ca.id
+JOIN school_sessions ss ON se.session_id = ss.id
+JOIN school_terms st ON se.term_id = st.id
+WHERE ca.id = $1
+  AND se.session_id = $2
+  AND s.school_id = $3
+GROUP BY ca.name, ss.session_name, st.name;
+
+`;
+
+    const result = await query(statsQuery, [
+      classArmId,
+      sessionFilter,
+      schoolId,
+    ]);
+
+    const stats = result.rows[0];
+    if (!stats) {
+      return sendSuccess(req, res, "No stats found", {
+        classArm: null,
+        session: null,
+        term: null,
+        stats: [],
+      });
+    }
+
+    const total = Number(stats.total_students) || 0;
+    const male = Number(stats.male_students) || 0;
+    const female = Number(stats.female_students) || 0;
+
+    const malePercentage =
+      total > 0 ? ((male / total) * 100).toFixed(0) + "%" : "0%";
+    const femalePercentage =
+      total > 0 ? ((female / total) * 100).toFixed(0) + "%" : "0%";
+
+    const responseData = {
+      classArm: stats.class_arm_name,
+      session: stats.session_name,
+      term: stats.term_name,
+      stats: [
+        { title: "Total Students", value: total, percentage: "100%" },
+        { title: "Male Students", value: male, percentage: malePercentage },
+        {
+          title: "Female Students",
+          value: female,
+          percentage: femalePercentage,
+        },
+        {
+          title: "Average Age",
+          value: stats.average_age ? Number(stats.average_age) : null,
+          percentage: null,
+        },
+      ],
+    };
+
+    return sendSuccess(
+      req,
+      res,
+      "Class Arm stats retrieved successfully",
+      responseData,
+      null,
+      "classStats"
     );
   }
 );

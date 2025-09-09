@@ -149,3 +149,29 @@ export const deleteAnnouncements = asyncHandler(
     sendSuccess(req, res, "Succesfuly deleted");
   }
 );
+
+export const createBoard = asyncHandler(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { title, description, status, content } = req.body;
+    logger.info(req.body);
+    const createBoardQuery = `
+  INSERT into kanban_board(title,description,status,content)
+  VALUES($1,$2,$3,$4)
+  `;
+
+    const result = await query(createBoardQuery, [
+      title,
+      description,
+      status,
+      content,
+    ]);
+
+    return sendSuccess(
+      req,
+      res,
+      "board saved successfully",
+      null,
+      result.rows[0]
+    );
+  }
+);

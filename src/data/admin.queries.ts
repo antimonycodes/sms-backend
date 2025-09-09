@@ -107,6 +107,7 @@ RETURNING *;
 export const getAllClassArmsQuery = `
 SELECT * from class_arms
 WHERE school_id = $1
+ORDER BY name
 `;
 
 // SUBJECTS
@@ -159,7 +160,6 @@ LEFT JOIN teachers t
 
 WHERE ss.school_id = $1
 GROUP BY ss.id
-ORDER BY ss.name ASC;
 
 `;
 
@@ -293,6 +293,23 @@ SELECT * FROM students
 WHERE email = $1 AND school_id = $2
 `;
 
+export const getAllStudentsQuery = `
+SELECT DISTINCT 
+  s.id,
+  s.admission_number,
+  s.first_name,
+  s.last_name,
+  s.middle_name,
+  s.email,
+  se.class_arm_id,
+  ca.name AS current_class
+FROM students s
+LEFT JOIN student_enrollments se ON s.id = se.student_id
+LEFT JOIN class_arms ca ON se.class_arm_id = ca.id
+WHERE s.school_id = $1
+
+`;
+
 export const getStudentByIdQuery = `
 SELECT * FROM students
 WHERE id = $1 AND school_id = $2
@@ -313,6 +330,5 @@ RETURNING *;
 export const deleteStudentQuery = `
 DELETE FROM students
 WHERE id = $1 AND school_id = $2
-
 RETURNING *;
 `;

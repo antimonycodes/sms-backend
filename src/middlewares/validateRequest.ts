@@ -48,14 +48,51 @@ export const schoolSignupValidation = [
 ];
 
 export const createStudentValidator = async (data: any, schoolId: string) => {
-  const { admission_number, first_name, last_name, email } = data;
+  const { admission_number, first_name, last_name, email, class_arm_id } = data;
 
   // required fields check
-  if (!admission_number || !first_name || !last_name || !email) {
+  // if (
+  //   !admission_number ||
+  //   !first_name ||
+  //   !last_name ||
+  //   !email ||
+  //   class_arm_id
+  // ) {
+  //   return {
+  //     valid: false,
+  //     status: 400,
+  //     message: "Missing required fields",
+  //   };
+  // }
+
+  if (!admission_number) {
     return {
       valid: false,
       status: 400,
-      message: "Missing required fields",
+      message: "Admission number is required",
+    };
+  }
+
+  if (!first_name) {
+    return {
+      valid: false,
+      status: 400,
+      message: "First name is required",
+    };
+  }
+
+  if (!email) {
+    return {
+      valid: false,
+      status: 400,
+      message: "Email is required",
+    };
+  }
+  if (!class_arm_id) {
+    return {
+      valid: false,
+      status: 400,
+      message: "Class is required",
     };
   }
 

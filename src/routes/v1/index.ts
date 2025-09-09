@@ -9,6 +9,8 @@ import commonRoutes from "./common";
 
 import { createSchoolService } from "../../controller/v1/index";
 import { signoutService } from "@/controller/v1/auth/signin";
+import { requireAnyAuthenticated } from "@/middlewares/auth";
+import { createBoard } from "@/controller/v1/shared/announvement";
 // import pool from "@/lib/db";
 
 // routes

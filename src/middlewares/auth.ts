@@ -3,6 +3,10 @@ import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { AuthUser, UserRole } from "@/types/auth.types";
 import { query } from "@/lib/db";
+import {
+  getActiveSessionQuery,
+  getActiveTermQuery,
+} from "@/data/admin.queries";
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
@@ -66,16 +70,26 @@ export const authenticate = async (
       return res.status(401).json({ message: "User not found" });
     }
 
+    const fetchActiveSession = await query(getActiveSessionQuery, [
+      user.school_id,
+    ]);
+    const activeSession = fetchActiveSession?.rows[0].id;
+
+    const fetchActiveTerm = await query(getActiveTermQuery, [user.school_id]);
+    const activeTerm = fetchActiveTerm?.rows[0].id;
+
     // Attach enriched user object (trusted for the rest of the request)
     authReq.user = {
       id: user.id,
       role: user.role as UserRole,
       schoolId: user.school_id,
+      currentSession: activeSession,
+      currentTerm: activeTerm,
     };
 
     // Log only user ID for security (avoid logging sensitive data)
     console.log(
-      `User authenticated: ID ${authReq.user.id}, Role: ${authReq.user.role}`
+      `User authenticated: ID ${authReq?.user.id}, Role: ${authReq.user.role}, Current Session: ${authReq?.user?.currentSession}, Current Term: ${authReq?.user?.currentTerm}`
     );
 
     next();

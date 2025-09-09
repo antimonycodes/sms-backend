@@ -7,6 +7,10 @@ import {
   updateClassArmService,
 } from "@/controller/v1/admin/classes";
 import {
+  createLeadershipRolesService,
+  getAllSchoolLeadershipRoleService,
+} from "@/controller/v1/admin/leadership";
+import {
   createSchoolSession,
   deleteSession,
   getActiveSession,
@@ -40,9 +44,11 @@ import {
   getAllTermsService,
 } from "@/controller/v1/admin/terms";
 import { schoolSignupService } from "@/controller/v1/auth/signin";
+import { createBoard } from "@/controller/v1/shared/announvement";
 import {
   requireAnyAuthenticated,
   requireSchoolAdmin,
+  requireSchoolStaff,
   requireScopedSchoolAdmin,
 } from "@/middlewares/auth";
 import { schoolSignupValidation } from "@/middlewares/validateRequest";
@@ -136,4 +142,19 @@ router.delete(
 );
 
 // router.get("/students", authenticate());
+
+// SCHOOL STUDENT LEADERSHIP ROLES
+router.post(
+  "/leadership/role",
+  requireScopedSchoolAdmin,
+  createLeadershipRolesService
+);
+router.get(
+  "/leadership/role",
+  requireSchoolStaff,
+  getAllSchoolLeadershipRoleService
+);
+
+router.post("/board", requireAnyAuthenticated, createBoard);
+
 export default router;

@@ -101,7 +101,6 @@ export const getAllSessions = async (
 ) => {
   const schoolId = req.user?.schoolId || req.currentSchoolId;
 
-  // Extract pagination parameters from query string
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
 

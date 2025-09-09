@@ -67,7 +67,7 @@ export const sendSuccess = async <T = any>(
   res: Response,
   message: string,
   data: T | null = null,
-  pagination: PaginationInfo | null = null,
+  pagination: any | null = null,
   keyName: string = "items" // fallback key
 ): Promise<Response> => {
   let schoolId =
@@ -101,7 +101,7 @@ export const sendPaginatedSuccess = async <T = any>(
   paginationInfo: PaginationInput,
   keyName: string = "items"
 ): Promise<Response> => {
-  const pagination: PaginationInfo = {
+  const pagination: any = {
     currentPage: paginationInfo.currentPage,
     totalPages: paginationInfo.totalPages,
     totalItems: paginationInfo.totalItems,
