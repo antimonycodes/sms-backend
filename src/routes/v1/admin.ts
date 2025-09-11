@@ -7,8 +7,15 @@ import {
   updateClassArmService,
 } from "@/controller/v1/admin/classes";
 import {
+  assignStudentLeadershipService,
   createLeadershipRolesService,
+  deleteSchoolLeadershipService,
+  deleteStudentLeadershipService,
   getAllSchoolLeadershipRoleService,
+  getAllStudentLeadershipRolesService,
+  getLeadershipStatsService,
+  updateSchoolLeadershipService,
+  updateStudentLeadershipService,
 } from "@/controller/v1/admin/leadership";
 import {
   createSchoolSession,
@@ -143,7 +150,7 @@ router.delete(
 
 // router.get("/students", authenticate());
 
-// SCHOOL STUDENT LEADERSHIP ROLES
+// SCHOOL  LEADERSHIP ROLES
 router.post(
   "/leadership/role",
   requireScopedSchoolAdmin,
@@ -154,7 +161,42 @@ router.get(
   requireSchoolStaff,
   getAllSchoolLeadershipRoleService
 );
+router.put(
+  "/leadership/role/:id",
+  requireSchoolStaff,
+  updateSchoolLeadershipService
+);
+router.delete(
+  "/leadership/role/:id",
+  requireSchoolStaff,
+  deleteSchoolLeadershipService
+);
 
-router.post("/board", requireAnyAuthenticated, createBoard);
+// SCHOOL/CLASS STUDENTS LEADERSHIP ROLES
 
+router.post(
+  "/leadership/student/assign",
+  requireScopedSchoolAdmin,
+  assignStudentLeadershipService
+);
+router.get(
+  "/leadership/student/session",
+  requireSchoolStaff,
+  getAllStudentLeadershipRolesService
+);
+router.put(
+  "/leadership/student/session/:id",
+  requireSchoolStaff,
+  updateStudentLeadershipService
+);
+router.delete(
+  "/leadership/student/session/:id",
+  requireSchoolStaff,
+  deleteStudentLeadershipService
+);
+router.get(
+  "/leadership/stats",
+  requireAnyAuthenticated,
+  getLeadershipStatsService
+);
 export default router;
